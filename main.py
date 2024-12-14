@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 from multiprocessing import Process
 import websockets
 from datetime import datetime
