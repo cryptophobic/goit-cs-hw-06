@@ -1,22 +1,20 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     ports:
-      - "3000:3000"
+      - '3000:3000'
+      - '5001:5001'
     depends_on:
-      - mongo
+      - mongodb
     volumes:
-      - ./front-init:/app/front-init
+      - .:/app
 
-  mongo:
+  mongodb:
     image: mongo:5.0
-    container_name: mongo
     ports:
-      - "27017:27017"
+      - '27017:27017'
     volumes:
-      - mongo_data:/data/db
+      - ./mongo_data:/data/db
 
 volumes:
   mongo_data:

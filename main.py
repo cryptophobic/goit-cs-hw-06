@@ -1,86 +1,111 @@
-import os
-from flask import Flask, request, render_template, send_from_directory
-from flask_sock import Sock
+import asyncio
+import logging
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 from multiprocessing import Process
-import socket
-import json
+import websockets
 from datetime import datetime
+import json
 from pymongo import MongoClient
+import os
 
-# MongoDB setup
-MONGO_URI = "mongodb://mongo:27017/"
-DB_NAME = "messages_db"
-COLLECTION_NAME = "messages"
+logging.basicConfig(level=logging.INFO)
 
-# Flask app setup
-app = Flask(__name__, static_folder='front-init', template_folder='front-init')
-sock = Sock(app)
+class HttpHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed_url = urlparse(self.path)
+        file_name = '/front-init/index.html' if parsed_url.path == '/' else parsed_url.path
+        # self.debue(file_name)
 
-# Static file handling
-@app.route('/static/<path:path>')
-def serve_static(path):
-    return send_from_directory('front-init', path)
+        if os.path.exists(file_name):
+            self.send_html_file(file_name)
+        else:
+            self.send_html_file("/front-init/error.html", 404)
 
-# Routes
-@app.route('/')
-def index():
-    return render_template('index.html')
+    def debue(self, text):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        # a = os.getcwd()
+        self.wfile.write(bytes(text, "utf-8"))
 
-@app.route('/message', methods=['GET', 'POST'])
-def message():
-    if request.method == 'POST':
-        username = request.form['username']
-        message = request.form['message']
-        return send_to_socket_server(username, message)
-    return render_template('message.html')
+    def do_POST(self):
+        content_length = int(self.headers["Content-Length"])
+        post_data = self.rfile.read(content_length)
+        parsed_data = parse_qs(post_data.decode("utf-8"))
+        username = parsed_data.get("username")[0]
+        message = parsed_data.get("message")[0]
 
-@app.errorhandler(404)
-def not_found(e):
-    return render_template('error.html'), 404
+        message_data = json.dumps({"username": username, "message": message})
 
-# Socket communication
-def send_to_socket_server(username, message):
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(("localhost", 5000))
-    data = json.dumps({"username": username, "message": message}).encode('utf-8')
-    client_socket.sendall(data)
+        async def send_message():
+            uri = "ws://localhost:5001"
+            async with websockets.connect(uri) as websocket:
+                await websocket.send(message_data)
 
-    # Receive server response
-    response = client_socket.recv(1024)
-    client_socket.close()
-    return response.decode('utf-8')
+        asyncio.run(send_message())
 
-# Socket server for MongoDB interaction
-def socket_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(("0.0.0.0", 5000))
-    server_socket.listen(5)
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"Message sent!")
 
-    client = MongoClient(MONGO_URI)
-    db = client[DB_NAME]
-    collection = db[COLLECTION_NAME]
+    def send_html_file(self, filename, status=200):
+        self.send_response(status)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
+        with open(filename, "rb") as file:
+            self.wfile.write(file.read())
 
-    while True:
-        conn, addr = server_socket.accept()
-        data = conn.recv(1024)
-        if data:
-            message = json.loads(data.decode('utf-8'))
-            message["date"] = datetime.now().isoformat()
-            collection.insert_one(message)
-            conn.sendall(f"OK, message {message} has successfully been inserted to DB".encode('utf-8'))
-        conn.close()
 
-# Main entry point
-def main():
-    # Start socket server in a separate process
-    socket_process = Process(target=socket_server)
-    socket_process.start()
+class WebSocketServer:
+    def __init__(self):
+        self.client = MongoClient("mongodb://mongodb:27017/")
+        self.db = self.client["message_db"]
+        self.collection = self.db["messages"]
 
-    # Start Flask app
-    app.run(host='0.0.0.0', port=3000, debug=True)
+    async def ws_handler(self, websocket):
+        async for message in websocket:
+            data = json.loads(message)
 
-    # Ensure the socket process is terminated on exit
-    socket_process.join()
+            date = datetime.now().strftime  ("%Y-%m-%d %H:%M:%S.%f")
+
+            message_data = {
+                "date": date,
+                "username": data["username"],
+                "message": data["message"],
+            }
+
+            self.collection.insert_one(message_data)
+
+            websocket.send(json.dumps(message_data))
+            logging.info(f"Saved message: {message_data}")
+
+
+async def run_websocket_server():
+    server = WebSocketServer()
+    async with websockets.serve(server.ws_handler, "0.0.0.0", 5001):
+        logging.info("WebSocket server started on port 5001")
+        await asyncio.Future()
+
+
+def start_websocket_server():
+    asyncio.run(run_websocket_server())
+
+
+def run_http_server():
+    server_address = ("", 3000)
+    httpd = HTTPServer(server_address, HttpHandler)
+    logging.info("HTTP server started on port 3000")
+    httpd.serve_forever()
+
 
 if __name__ == "__main__":
-    main()
+    http_process = Process(target=run_http_server)
+    ws_process = Process(target=start_websocket_server)
+
+    http_process.start()
+    ws_process.start()
+
+    http_process.join()
+    ws_process.join()

@@ -1,19 +1,12 @@
-FROM python:3.9-slim
+FROM python:3.13-slim
 
-# Set the working directory
-WORKDIR /app
+WORKDIR /
 
-# Copy application files
-COPY . /app
+COPY . /
 
-# Install dependencies
-RUN pip install --no-cache-dir flask flask-sock pymongo
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port for Flask
 EXPOSE 3000
+EXPOSE 5001
 
-# Expose port for Socket server
-EXPOSE 5000
-
-# Run the main application
 CMD ["python", "main.py"]
