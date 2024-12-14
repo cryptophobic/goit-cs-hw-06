@@ -38,8 +38,7 @@ Socket-сервер переводить отриманий байт-рядок 
 
 Результат
 
+https://github.com/user-attachments/assets/4c0aa341-6545-4c3f-a9dc-0795df5024e8
 
-
-https://github.com/user-attachments/assets/8827a5e6-ce7c-4b95-b6d6-df4ffd950fe9
 
 
