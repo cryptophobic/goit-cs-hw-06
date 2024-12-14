@@ -37,5 +37,9 @@ Socket-сервер переводить отриманий байт-рядок 
 Ключ "date" кожного повідомлення — це час отримання повідомлення: datetime.now(). Тобто кожне нове повідомлення від вебпрограми має дописуватися до бази даних з часом отримання.
 
 Результат
-https://github.com/user-attachments/assets/2c28b03b-f492-46da-816f-bb02da8153d7
+
+
+
+https://github.com/user-attachments/assets/8827a5e6-ce7c-4b95-b6d6-df4ffd950fe9
+
 
