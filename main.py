@@ -31,8 +31,7 @@ def message():
     if request.method == 'POST':
         username = request.form['username']
         message = request.form['message']
-        send_to_socket_server(username, message)
-        return "Message sent!"
+        return send_to_socket_server(username, message)
     return render_template('message.html')
 
 @app.errorhandler(404)
@@ -45,7 +44,11 @@ def send_to_socket_server(username, message):
     client_socket.connect(("localhost", 5000))
     data = json.dumps({"username": username, "message": message}).encode('utf-8')
     client_socket.sendall(data)
+
+    # Receive server response
+    response = client_socket.recv(1024)
     client_socket.close()
+    return response.decode('utf-8')
 
 # Socket server for MongoDB interaction
 def socket_server():
@@ -64,6 +67,7 @@ def socket_server():
             message = json.loads(data.decode('utf-8'))
             message["date"] = datetime.now().isoformat()
             collection.insert_one(message)
+            conn.sendall(f"OK, message {message} has successfully been inserted to DB".encode('utf-8'))
         conn.close()
 
 # Main entry point
