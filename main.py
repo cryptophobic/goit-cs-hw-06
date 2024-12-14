@@ -6,6 +6,8 @@ from multiprocessing import Process
 import websockets
 from datetime import datetime
 import json
+from bson import json_util
+
 from pymongo import MongoClient
 import os
 
@@ -15,40 +17,42 @@ class HttpHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_url = urlparse(self.path)
         file_name = '/front-init/index.html' if parsed_url.path == '/' else parsed_url.path
-        # self.debue(file_name)
 
         if os.path.exists(file_name):
             self.send_html_file(file_name)
         else:
             self.send_html_file("/front-init/error.html", 404)
 
-    def debue(self, text):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        # a = os.getcwd()
-        self.wfile.write(bytes(text, "utf-8"))
-
     def do_POST(self):
-        content_length = int(self.headers["Content-Length"])
+        # Read the length of the incoming data
+        content_length = int(self.headers['Content-Length'])
+        # Read the data itself
         post_data = self.rfile.read(content_length)
-        parsed_data = parse_qs(post_data.decode("utf-8"))
-        username = parsed_data.get("username")[0]
-        message = parsed_data.get("message")[0]
 
-        message_data = json.dumps({"username": username, "message": message})
-
-        async def send_message():
+        async def send_message(ws_data):
             uri = "ws://localhost:5001"
             async with websockets.connect(uri) as websocket:
-                await websocket.send(message_data)
+                await websocket.send(ws_data)
+                res = await websocket.recv()
+                # Respond with a success message
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                resp = {"status": "success", "received": json.loads(res)}
+                self.wfile.write(json.dumps(resp).encode('utf-8'))
 
-        asyncio.run(send_message())
-
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(b"Message sent!")
+        try:
+            # Parse the JSON data
+            data = json.loads(post_data)
+            message_data = json.dumps(data)
+            asyncio.run(send_message(message_data))
+        except json.JSONDecodeError:
+            # Handle JSON parsing errors
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            response = {"status": "error", "message": "Invalid JSON"}
+            self.wfile.write(json.dumps(response).encode('utf-8'))
 
     def send_html_file(self, filename, status=200):
         self.send_response(status)
@@ -77,8 +81,7 @@ class WebSocketServer:
             }
 
             self.collection.insert_one(message_data)
-
-            websocket.send(json.dumps(message_data))
+            await websocket.send(json_util.dumps(message_data))
             logging.info(f"Saved message: {message_data}")
 
 
